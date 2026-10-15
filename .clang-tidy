@@ -1,0 +1,7 @@
+Checks: >
+  bugprone-*,cppcoreguidelines-*,modernize-*,performance-*,
+  -modernize-use-trailing-return-type,-cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-type-reinterpret-cast,
+  -bugprone-easily-swappable-parameters,-cppcoreguidelines-non-private-member-variables-in-classes
+WarningsAsErrors: ''
+HeaderFilterRegex: 'include/qc/.*'

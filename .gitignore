@@ -1,0 +1,20 @@
+# Build output
+build/
+.cache/
+compile_commands.json
+
+# Generated protobuf bindings (produced by protoc at build time)
+*.pb.cc
+*.pb.h
+
+# Python / editor artefacts
+__pycache__/
+*.user
+
+# AppImage build helpers fetched on demand, and the large AppImage itself
+# (the portable archive is published under releases/ instead)
+tools/appimage-tools/
+dist/*.AppImage
+
+# Local tool and session directories (any hidden directory) — never commit
+.*/

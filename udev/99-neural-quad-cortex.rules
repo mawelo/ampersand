@@ -1,0 +1,5 @@
+# Neural DSP Quad Cortex (USB HID control interface): allow console users and
+# group plugdev to open /dev/hidrawN read/write. Install with
+#   sudo install -m 644 udev/99-neural-quad-cortex.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="152a", ATTRS{idProduct}=="880a", MODE="0660", GROUP="plugdev", TAG+="uaccess"

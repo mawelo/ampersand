@@ -1,0 +1,46 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "clang++-22 / C++26 / RelWithDebInfo",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_COMPILER": "/usr/bin/clang++-22",
+        "CMAKE_C_COMPILER": "/usr/bin/clang-22",
+        "CMAKE_PREFIX_PATH": "$env{HOME}/Documents/Qt/6.11.1/gcc_64",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/.local"
+      }
+    },
+    {
+      "name": "asan",
+      "displayName": "Debug + ASan/UBSan",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "QC_SANITIZE": "ON",
+        "QC_BUILD_GUI": "OFF"
+      }
+    },
+    {
+      "name": "nogui",
+      "displayName": "Core + CLI + MCP only (no Qt)",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/nogui",
+      "cacheVariables": { "QC_BUILD_GUI": "OFF" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "default", "configurePreset": "default" },
+    { "name": "asan", "configurePreset": "asan" },
+    { "name": "nogui", "configurePreset": "nogui" }
+  ],
+  "testPresets": [
+    { "name": "default", "configurePreset": "default", "output": { "outputOnFailure": true } },
+    { "name": "asan", "configurePreset": "asan", "output": { "outputOnFailure": true } }
+  ]
+}
