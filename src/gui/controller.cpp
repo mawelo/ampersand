@@ -396,3 +396,16 @@ void Controller::listPresets(const QString& folder) {
     for (auto& e : *l) out.push_back(std::move(e));
     emit presetsListed(folder, out);
 }
+
+void Controller::deletePreset(const QString& folder, const QString& name) {
+    guarded("delete preset", [&](qc::QuadCortex& d) { return d.delete_preset(folder.toStdString(), name.toStdString()); });
+    emit logMessage(QStringLiteral("deleted \"%1\" from %2 (listings lag a few seconds)").arg(name, folder));
+    listPresets(folder);
+}
+
+void Controller::movePreset(const QString& folder, const QString& name, int toPosition) {
+    guarded("move preset",
+            [&](qc::QuadCortex& d) { return d.move_preset(folder.toStdString(), name.toStdString(), toPosition); });
+    emit logMessage(QStringLiteral("moved \"%1\" to %2 %3").arg(name, folder, qs(qc::view::position_to_slot(toPosition))));
+    listPresets(folder);
+}

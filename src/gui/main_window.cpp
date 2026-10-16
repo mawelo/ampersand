@@ -292,6 +292,8 @@ void MainWindow::buildUi() {
     connect(library_, &LibraryPanel::foldersRequested, this, &MainWindow::foldersRequested);
     connect(library_, &LibraryPanel::recallRequested, this, &MainWindow::recallRequested);
     connect(library_, &LibraryPanel::saveRequested, this, &MainWindow::saveRequested);
+    connect(library_, &LibraryPanel::deletePresetRequested, this, &MainWindow::deletePresetRequested);
+    connect(library_, &LibraryPanel::movePresetRequested, this, &MainWindow::movePresetRequested);
 
     for (int i = 0; i < 8; ++i) {
         auto* b = sceneButtons_[static_cast<std::size_t>(i)];

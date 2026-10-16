@@ -79,6 +79,8 @@ signals:
     void sceneColorRequested(int scene, quint32 argb);
     void saveBackupRequested(const QString& path);
     void restoreBackupRequested(const QString& path);
+    void deletePresetRequested(const QString& folder, const QString& name);
+    void movePresetRequested(const QString& folder, const QString& name, int toPosition);
 
 public slots:
     /// Zelle von aussen auswaehlen, 0-basiert. Gebraucht fuer `--select` auf

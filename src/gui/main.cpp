@@ -102,6 +102,8 @@ int main(int argc, char** argv) {
     QObject::connect(&window, &MainWindow::sceneColorRequested, controller, &Controller::setSceneColor);
     QObject::connect(&window, &MainWindow::saveBackupRequested, controller, &Controller::saveBackup);
     QObject::connect(&window, &MainWindow::restoreBackupRequested, controller, &Controller::restoreBackup);
+    QObject::connect(&window, &MainWindow::deletePresetRequested, controller, &Controller::deletePreset);
+    QObject::connect(&window, &MainWindow::movePresetRequested, controller, &Controller::movePreset);
 
     // controller -> GUI
     QObject::connect(controller, &Controller::connected, &window, &MainWindow::onConnected);

@@ -9,9 +9,12 @@
 #include <QComboBox>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -69,6 +72,8 @@ LibraryPanel::LibraryPanel(QWidget* parent) : QWidget(parent) {
     connect(list_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem* item, QListWidgetItem*) {
         if (item && saveSlot_->text().isEmpty()) saveSlot_->setPlaceholderText(item->data(Qt::UserRole + 1).toString());
     });
+    list_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(list_, &QListWidget::customContextMenuRequested, this, &LibraryPanel::showContextMenu);
     connect(save_, &QPushButton::clicked, this, [this] {
         auto pos = qc::view::slot_to_position(saveSlot_->text().toStdString());
         if (!pos) {
@@ -100,8 +105,10 @@ void LibraryPanel::setFolders(const QVector<qc::Folder>& folders) {
     folders_->clear();
     folders_->addItem(QStringLiteral("My Presets"), QString::fromUtf8(qc::view::kUserSetlist.data(), static_cast<qsizetype>(qc::view::kUserSetlist.size())));
     folders_->addItem(QStringLiteral("Factory Library"), QString::fromUtf8(qc::view::kFactorySetlist.data(), static_cast<qsizetype>(qc::view::kFactorySetlist.size())));
+    factoryKeys_.clear();
     for (const auto& f : folders) {
         if (f.file_count == 0) continue;
+        if (f.is_factory) factoryKeys_.insert(QString::fromStdString(f.key));
         if (qc::view::same_folder(f.key, qc::view::kUserSetlist) || qc::view::same_folder(f.key, qc::view::kFactorySetlist)) continue;
         const QString name = f.name.empty() ? QString::fromStdString(f.key) : QString::fromStdString(f.name);
         folders_->addItem(QStringLiteral("%1 (%2)").arg(name).arg(f.file_count), QString::fromStdString(f.key));
@@ -119,6 +126,7 @@ void LibraryPanel::setPresets(const QString& folder, const QVector<qc::PresetEnt
         auto* item = new QListWidgetItem(QStringLiteral("%1  %2").arg(QString::fromStdString(p.slot), -4).arg(QString::fromStdString(p.name)));
         item->setData(Qt::UserRole, p.index);
         item->setData(Qt::UserRole + 1, QString::fromStdString(p.slot));
+        item->setData(Qt::UserRole + 2, QString::fromStdString(p.name));
         item->setToolTip(QStringLiteral("%1 — %2").arg(QString::fromStdString(p.author), QString::fromStdString(p.key)));
         list_->addItem(item);
     }
@@ -133,4 +141,49 @@ void LibraryPanel::setCurrent(const QString& folder, int position) {
             return;
         }
     }
+}
+
+bool LibraryPanel::currentIsFactory() const {
+    const QString key = currentFolder();
+    if (qc::view::same_folder(key.toStdString(), qc::view::kFactorySetlist)) return true;
+    return factoryKeys_.contains(key);
+}
+
+void LibraryPanel::showContextMenu(const QPoint& pos) {
+    QListWidgetItem* item = list_->itemAt(pos);
+    if (!item) return;
+    const int position = item->data(Qt::UserRole).toInt();
+    const QString slot = item->data(Qt::UserRole + 1).toString();
+    const QString name = item->data(Qt::UserRole + 2).toString();
+    const QString folder = currentFolder();
+
+    QMenu menu(this);
+    menu.addAction(QStringLiteral("Recall %1").arg(slot), this, [this, folder, position] { emit recallRequested(folder, position); });
+
+    // Loeschen/Verschieben nur im eigenen (schreibbaren) Ordner und nur mit
+    // bekanntem Namen - delete_preset/move_preset adressieren ueber den Namen.
+    if (!currentIsFactory() && !name.isEmpty()) {
+        menu.addSeparator();
+        menu.addAction(QStringLiteral("Move \"%1\" to slot…").arg(name), this, [this, folder, name, slot] {
+            bool ok = false;
+            const QString target = QInputDialog::getText(this, QStringLiteral("Move preset"),
+                                                         QStringLiteral("New slot for \"%1\" (e.g. 30A):").arg(name),
+                                                         QLineEdit::Normal, slot, &ok);
+            if (!ok) return;
+            auto p = qc::view::slot_to_position(target.trimmed().toStdString());
+            if (!p) {
+                status_->setText(QStringLiteral("slot: %1").arg(QString::fromStdString(p.error())));
+                return;
+            }
+            emit movePresetRequested(folder, name, *p);
+        });
+        menu.addAction(QStringLiteral("Delete \"%1\"…").arg(name), this, [this, folder, name] {
+            const auto choice = QMessageBox::warning(
+                this, QStringLiteral("Delete preset?"),
+                QStringLiteral("Delete \"%1\" from the unit? This cannot be undone.").arg(name),
+                QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+            if (choice == QMessageBox::Yes) emit deletePresetRequested(folder, name);
+        });
+    }
+    menu.exec(list_->mapToGlobal(pos));
 }

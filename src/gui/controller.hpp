@@ -70,6 +70,8 @@ public slots:
     void setIoMeter(bool on);
     void listFolders();
     void listPresets(const QString& folder);
+    void deletePreset(const QString& folder, const QString& name);
+    void movePreset(const QString& folder, const QString& name, int toPosition);
     void setSceneLabel(int scene, const QString& label);
     void setSceneColor(int scene, quint32 argb);
     /// LocalBackup vom Geraet holen und privat (0600) nach `path` sichern.

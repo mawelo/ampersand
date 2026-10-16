@@ -10,6 +10,7 @@
 
 #include "qc/device.hpp"
 
+#include <QSet>
 #include <QVector>
 #include <QWidget>
 
@@ -35,9 +36,17 @@ signals:
     void foldersRequested();
     void recallRequested(const QString& folder, int position);
     void saveRequested(const QString& folder, int position, const QString& name, int instrument);
+    void deletePresetRequested(const QString& folder, const QString& name);
+    void movePresetRequested(const QString& folder, const QString& name, int toPosition);
 
 private:
+    /// true, wenn der gewaehlte Ordner werksseitig (schreibgeschuetzt) ist -
+    /// dann kein Loeschen/Verschieben anbieten.
+    [[nodiscard]] bool currentIsFactory() const;
+    void showContextMenu(const QPoint& pos);
+
     QComboBox* folders_{nullptr};
+    QSet<QString> factoryKeys_;
     QListWidget* list_{nullptr};
     QPushButton* refresh_{nullptr};
     QPushButton* scan_{nullptr};
