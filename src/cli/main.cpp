@@ -657,12 +657,15 @@ int run(const Args& a) {
         if (a.positional.empty()) return fail("backup-save <file.json>");
         auto b = qc.read_backup();
         if (!b) return fail(b.error());
-        // Nutzerdaten: Datei nur fuer den Besitzer lesbar (0600), auch wenn sie
-        // schon existierte (Re-Review 2026-10-15). Der Pfad ist bei der CLI
-        // bewusst frei waehlbar.
+        // Nutzerdaten: Datei nur fuer den Besitzer lesbar (0600). Erst in eine
+        // Temp-Datei daneben schreiben, dann per rename an ihren Platz ziehen -
+        // so ueberlebt eine schon vorhandene Sicherung einen Schreibfehler
+        // (Re-Review 2026-10-15: O_TRUNC zerstoerte sie vorher sofort). Der
+        // Pfad ist bei der CLI bewusst frei waehlbar.
         const std::string& file = a.positional[0];
-        const int fd = ::open(file.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
-        if (fd < 0) return fail(std::format("cannot write {}: {}", file, std::strerror(errno)));
+        const std::string tmp = file + ".tmp." + std::to_string(::getpid());
+        const int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+        if (fd < 0) return fail(std::format("cannot write {}: {}", tmp, std::strerror(errno)));
         const bool mode_ok = ::fchmod(fd, 0600) == 0;
         std::size_t done = 0;
         bool write_ok = mode_ok;
@@ -672,9 +675,18 @@ int run(const Args& a) {
             write_ok = n > 0;
             if (write_ok) done += static_cast<std::size_t>(n);
         }
+        if (write_ok && ::fsync(fd) != 0) write_ok = false;
         const int saved_errno = errno;
         const bool close_ok = ::close(fd) == 0;
-        if (!write_ok || !close_ok) return fail(std::format("cannot write {}: {}", file, std::strerror(saved_errno)));
+        if (!write_ok || !close_ok) {
+            ::unlink(tmp.c_str());
+            return fail(std::format("cannot write {}: {}", file, std::strerror(saved_errno)));
+        }
+        if (::rename(tmp.c_str(), file.c_str()) != 0) {
+            const int rename_errno = errno;
+            ::unlink(tmp.c_str());
+            return fail(std::format("cannot place {}: {}", file, std::strerror(rename_errno)));
+        }
         std::println("saved LocalBackup ({} bytes, mode 0600) to {}", b->size(), file);
         return 0;
     }
