@@ -79,6 +79,13 @@ void MainWindow::buildUi() {
         onLog(QStringLiteral("exported chain report to %1").arg(path));
     });
     file->addSeparator();
+    saveBackupAction_ = file->addAction(QStringLiteral("&Save backup to file…"), this, [this] { doSaveBackup(); });
+    saveBackupAction_->setToolTip(QStringLiteral("Have the unit build a LocalBackup (~90 s) and save it as a private 0600 file."));
+    restoreBackupAction_ = file->addAction(QStringLiteral("Restore backup from file…"), this, [this] { doRestoreBackup(); });
+    restoreBackupAction_->setToolTip(QStringLiteral("Restore a LocalBackup file — DESTRUCTIVE: overwrites presets, captures and IRs."));
+    saveBackupAction_->setEnabled(false);
+    restoreBackupAction_->setEnabled(false);
+    file->addSeparator();
     file->addAction(QStringLiteral("&Quit"), QKeySequence::Quit, qApp, &QApplication::quit);
     auto* help = menuBar()->addMenu(QStringLiteral("&Help"));
     help->addAction(QStringLiteral("&About"), this, [this] {
@@ -325,6 +332,8 @@ void MainWindow::onConnected(const QString& summary) {
     refreshAction_->setEnabled(true);
     prevAction_->setEnabled(true);
     nextAction_->setEnabled(true);
+    saveBackupAction_->setEnabled(true);
+    restoreBackupAction_->setEnabled(true);
     library_->setEnabledAll(true);
     onLog(QStringLiteral("connected: %1").arg(summary));
     updateHeader();
@@ -340,6 +349,8 @@ void MainWindow::onDisconnected(const QString& reason) {
     refreshAction_->setEnabled(false);
     prevAction_->setEnabled(false);
     nextAction_->setEnabled(false);
+    saveBackupAction_->setEnabled(false);
+    restoreBackupAction_->setEnabled(false);
     library_->setEnabledAll(false);
     view_.reset();
     catalog_.reset();
@@ -547,6 +558,47 @@ void MainWindow::recolorScene(int scene) {
     const QColor picked = QColorDialog::getColor(current, this, QStringLiteral("Colour of scene %1").arg(qc::view::scene_letter(scene).c_str()));
     if (!picked.isValid()) return;
     emit sceneColorRequested(scene, 0xFF000000u | (static_cast<quint32>(picked.rgb()) & 0x00FFFFFFu));
+}
+
+void MainWindow::doSaveBackup() {
+    if (!connected_) return;
+    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Save LocalBackup"),
+                                                      QStringLiteral("quad-cortex-backup.json"), QStringLiteral("JSON (*.json)"));
+    if (path.isEmpty()) return;
+    saveBackupAction_->setEnabled(false);
+    restoreBackupAction_->setEnabled(false);
+    onLog(QStringLiteral("backup-save: asking the unit to build a LocalBackup (~90 s) …"));
+    emit saveBackupRequested(path);
+}
+
+void MainWindow::doRestoreBackup() {
+    if (!connected_) return;
+    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Restore LocalBackup"), QString(),
+                                                      QStringLiteral("JSON (*.json);;All files (*)"));
+    if (path.isEmpty()) return;
+    const auto choice = QMessageBox::warning(
+        this, QStringLiteral("Restore backup?"),
+        QStringLiteral("This overwrites the unit's presets, captures and IRs with the contents of\n\n%1\n\n"
+                       "This cannot be undone. Continue?")
+            .arg(path),
+        QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+    if (choice != QMessageBox::Yes) return;
+    saveBackupAction_->setEnabled(false);
+    restoreBackupAction_->setEnabled(false);
+    onLog(QStringLiteral("backup-restore: sending %1 to the unit …").arg(path));
+    emit restoreBackupRequested(path);
+}
+
+void MainWindow::onBackupFinished(bool ok, const QString& message) {
+    if (connected_) {
+        saveBackupAction_->setEnabled(true);
+        restoreBackupAction_->setEnabled(true);
+    }
+    onLog(QStringLiteral("backup: %1").arg(message));
+    if (ok)
+        QMessageBox::information(this, QStringLiteral("Backup"), message);
+    else
+        QMessageBox::critical(this, QStringLiteral("Backup failed"), message);
 }
 
 bool MainWindow::saveScreenshot(const QString& path) {

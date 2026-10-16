@@ -77,6 +77,8 @@ signals:
     void presetsRequested(const QString& folder);
     void sceneLabelRequested(int scene, const QString& label);
     void sceneColorRequested(int scene, quint32 argb);
+    void saveBackupRequested(const QString& path);
+    void restoreBackupRequested(const QString& path);
 
 public slots:
     /// Zelle von aussen auswaehlen, 0-basiert. Gebraucht fuer `--select` auf
@@ -100,6 +102,7 @@ public slots:
     void onLog(const QString& line);
     void onError(const QString& message);
     void onBusy(bool on);
+    void onBackupFinished(bool ok, const QString& message);
 
     /// Grab the whole window into a PNG (for automated verification).
     bool saveScreenshot(const QString& path);
@@ -111,6 +114,8 @@ private:
     void buildUi();
     void renameScene(int scene);
     void recolorScene(int scene);
+    void doSaveBackup();
+    void doRestoreBackup();
     void chooseInputPort(int row);
     void chooseOutputPort(int row);
     void chooseBlock(int row, int column);
@@ -141,6 +146,8 @@ private:
     QAction* prevAction_{nullptr};
     QAction* nextAction_{nullptr};
     QAction* refreshAction_{nullptr};
+    QAction* saveBackupAction_{nullptr};
+    QAction* restoreBackupAction_{nullptr};
     std::optional<qc::view::PresetView> view_;
     QString folder_;
     int position_{-1};

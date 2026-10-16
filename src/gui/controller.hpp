@@ -72,6 +72,11 @@ public slots:
     void listPresets(const QString& folder);
     void setSceneLabel(int scene, const QString& label);
     void setSceneColor(int scene, quint32 argb);
+    /// LocalBackup vom Geraet holen und privat (0600) nach `path` sichern.
+    void saveBackup(const QString& path);
+    /// LocalBackup aus `path` zurueckspielen. DESTRUKTIV (ueberschreibt
+    /// Presets/Captures/IRs) - die Sicherheitsabfrage liegt in der GUI.
+    void restoreBackup(const QString& path);
 
 signals:
     void connected(const QString& summary);
@@ -90,6 +95,8 @@ signals:
     void logMessage(const QString& line);
     void errorOccurred(const QString& message);
     void busy(bool on);
+    /// Backup/Restore abgeschlossen; `message` ist menschenlesbar.
+    void backupFinished(bool ok, const QString& message);
 
 private:
     bool redact_serial_{false};

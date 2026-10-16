@@ -14,7 +14,7 @@ needs no vendor software and no network. Written in C++26.
 
 | Component | Purpose |
 |---|---|
-| `ampersand` | Qt Widgets GUI: the signal grid (4 rows x 8 columns), block parameter editor, scenes A–H, preset library, Save As, master volume, live sync with the unit. |
+| `ampersand` | Qt Widgets GUI: the signal grid (4 rows x 8 columns), block parameter editor, scenes A–H, preset library, Save As, master volume, backup/restore to a file (File menu), live sync with the unit. |
 | `qcctl` | Command-line tool for everything the library can do: version, folders, presets, recall, live-grid dump (text/JSON), parameters, bypass, blocks, save, catalog search, traffic monitor. |
 | `qc-mcp` | MCP server (stdio JSON-RPC) exposing `qc_*` tools for USB control of the unit. |
 | `libqccore` | The library behind all three (`include/qc/`). |

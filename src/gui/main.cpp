@@ -100,6 +100,8 @@ int main(int argc, char** argv) {
     QObject::connect(&window, &MainWindow::presetsRequested, controller, &Controller::listPresets);
     QObject::connect(&window, &MainWindow::sceneLabelRequested, controller, &Controller::setSceneLabel);
     QObject::connect(&window, &MainWindow::sceneColorRequested, controller, &Controller::setSceneColor);
+    QObject::connect(&window, &MainWindow::saveBackupRequested, controller, &Controller::saveBackup);
+    QObject::connect(&window, &MainWindow::restoreBackupRequested, controller, &Controller::restoreBackup);
 
     // controller -> GUI
     QObject::connect(controller, &Controller::connected, &window, &MainWindow::onConnected);
@@ -118,6 +120,7 @@ int main(int argc, char** argv) {
     QObject::connect(controller, &Controller::logMessage, &window, &MainWindow::onLog);
     QObject::connect(controller, &Controller::errorOccurred, &window, &MainWindow::onError);
     QObject::connect(controller, &Controller::busy, &window, &MainWindow::onBusy);
+    QObject::connect(controller, &Controller::backupFinished, &window, &MainWindow::onBackupFinished);
 
     worker.start();
     window.show();

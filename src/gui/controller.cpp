@@ -6,6 +6,7 @@
 // Historie: git log
 #include "controller.hpp"
 
+#include "qc/file_write.hpp"
 #include "qc/log.hpp"
 
 #include <QThread>
@@ -13,6 +14,9 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <fstream>
+#include <iterator>
+#include <string>
 #include <thread>
 
 using namespace std::chrono_literals;
@@ -315,6 +319,54 @@ void Controller::setSceneLabel(int scene, const QString& label) {
 void Controller::setSceneColor(int scene, quint32 argb) {
     guarded("scene colour", [&](qc::QuadCortex& d) { return d.set_scene_color(scene, argb); });
     scheduleRefresh();
+}
+
+void Controller::saveBackup(const QString& path) {
+    if (!qc_ || !qc_->connected()) {
+        emit backupFinished(false, QStringLiteral("not connected"));
+        return;
+    }
+    emit busy(true);
+    auto b = qc_->read_backup();  // Geraet baut das Backup (~90 s)
+    bool ok = false;
+    QString msg;
+    if (!b) {
+        msg = qs(b.error());
+    } else if (auto w = qc::io::write_private_atomic(path.toStdString(), *b); !w) {
+        msg = qs(w.error());
+    } else {
+        ok = true;
+        msg = QStringLiteral("saved %1 bytes (mode 0600) to %2").arg(b->size()).arg(path);
+    }
+    emit busy(false);
+    emit logMessage(QStringLiteral("backup-save: %1").arg(msg));
+    emit backupFinished(ok, msg);
+}
+
+void Controller::restoreBackup(const QString& path) {
+    if (!qc_ || !qc_->connected()) {
+        emit backupFinished(false, QStringLiteral("not connected"));
+        return;
+    }
+    // Datei im Worker-Thread lesen, nicht im GUI-Thread.
+    std::ifstream f(path.toStdString(), std::ios::binary);
+    if (!f) {
+        emit backupFinished(false, QStringLiteral("cannot open %1").arg(path));
+        return;
+    }
+    std::string json((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    if (f.bad()) {
+        emit backupFinished(false, QStringLiteral("cannot read %1").arg(path));
+        return;
+    }
+    emit busy(true);
+    auto r = qc_->restore_backup(json);
+    emit busy(false);
+    const bool ok = r.has_value();
+    const QString msg = ok ? QStringLiteral("device applied the backup (%1 bytes)").arg(json.size()) : qs(r.error());
+    emit logMessage(QStringLiteral("backup-restore: %1").arg(msg));
+    emit backupFinished(ok, msg);
+    if (ok) scheduleRefresh();
 }
 
 void Controller::listFolders() {
