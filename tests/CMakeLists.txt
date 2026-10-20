@@ -16,6 +16,7 @@ add_executable(qc_tests
     test_io_meter.cpp
     test_backup_store.cpp
     test_file_write.cpp
+    test_mcp_server.cpp
     ../src/mcp/backup_store.cpp
     fake_transport.hpp)
 target_link_libraries(qc_tests PRIVATE qccore Catch2::Catch2WithMain qc_warnings)

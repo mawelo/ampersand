@@ -103,6 +103,11 @@ public:
         const std::string method = method_it->get<std::string>();
         const json params = (req.contains("params") && req["params"].is_object()) ? req["params"] : json::object();
 
+        // Any json type_error from the dispatch below (e.g. value() on a params
+        // field of the wrong type, such as a non-string protocolVersion/name)
+        // becomes a JSON-RPC error, never an uncaught throw that terminates the
+        // server (L3; the first fix guarded only req/method).
+        try {
         if (method == "initialize") {
             json result{{"protocolVersion", negotiate(params.value("protocolVersion", std::string(kProtocolVersion)))},
                         {"capabilities", {{"tools", {{"listChanged", false}}}}},
@@ -149,6 +154,9 @@ public:
         if (method == "resources/list") { emit(out, make_result(id, json{{"resources", json::array()}})); return; }
         if (method == "prompts/list") { emit(out, make_result(id, json{{"prompts", json::array()}})); return; }
         if (!is_notification) emit(out, make_error(id, -32601, "method not found: " + method));
+        } catch (const std::exception& e) {
+            if (!is_notification) emit(out, make_error(id, -32602, std::string("invalid request: ") + e.what()));
+        }
     }
 
     static constexpr std::string_view kProtocolVersion = "2025-06-18";
