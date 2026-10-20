@@ -2,26 +2,34 @@
 # pre-push: Schutz-Gate fuer das oeffentliche Repo. Zwei Pruefungen:
 #   1. Identitaet (B2, N1): nur Commits UND annotierte Tags mit GitHub-noreply-
 #      Adresse (Autor, Committer, Tagger) duerfen gepusht werden.
-#   2. Inhalt (N2): der zu pushende Stand darf kein Schluesselmaterial und
-#      keine privaten Daten enthalten. kCommsKey und die Datei-Kryptografie
-#      gehoeren NICHT in die oeffentlichen Quellen (B1); ein frueherer
-#      Kommentar an dieser Stelle behauptete das Gegenteil und war falsch.
+#   2. Inhalt (N2/N2b): kein Schluesselmaterial und keine privaten Daten im
+#      Push-Bereich. Geprueft wird JEDER Commit aus git rev-list, nicht nur die
+#      Spitze. kCommsKey und die Datei-Kryptografie gehoeren NICHT in die
+#      oeffentlichen Quellen (B1).
 #
-# Versioniert (tools/hooks/), aktiviert per  git config core.hooksPath tools/hooks.
-# ACHTUNG: `git push --no-verify` umgeht jeden Hook - vor einem Push nicht nutzen.
+# Die Sperrliste nennt nur GENERISCHE Muster (N14). Projektspezifische, konkrete
+# Werte (Serien, MAC-Praefixe, Hostnamen, Mailadressen, IP-Bereiche) stehen in
+# der NICHT versionierten Datei tools/hooks/denylist.local (eine ERE je Zeile,
+# # und Leerzeilen werden ignoriert).
+#
+# Versioniert, aktiviert per  git config core.hooksPath tools/hooks.
+# ACHTUNG: `git push --no-verify` umgeht jeden Hook.
 z=0000000000000000000000000000000000000000
 ok_mail='[^ ]+@users\.noreply\.github\.com'
 ok_any="(noreply@github\.com|${ok_mail})"
-# Muster, die nicht nach aussen duerfen: Schluessel-Symbol, Krypto, private
-# Pfade/Hosts/Adressen/Serien/MACs. Das Release-Zip (binaer) ist ausgenommen.
+top=$(git rev-parse --show-toplevel)
 forbidden='kCommsKey|xxtea|/home/[a-z][a-z0-9_-]*|([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}'
+denylist="$top/tools/hooks/denylist.local"
+if [ -f "$denylist" ]; then
+    extra=$(grep -vE '^[[:space:]]*(#|$)' "$denylist" | paste -sd '|' -)
+    [ -n "$extra" ] && forbidden="$forbidden|$extra"
+fi
 
 fail=0
 while read -r lref lsha rref rsha; do
     [ "$lsha" = "$z" ] && continue
 
-    # Annotierte Tags: Tagger-Adresse pruefen. Die Commits, auf die der Tag
-    # zeigt, deckt die Range-Pruefung weiter unten ab.
+    # Annotierte Tags: Tagger-Adresse pruefen.
     case "$lref" in
         refs/tags/*)
             if [ "$(git cat-file -t "$lsha" 2>/dev/null)" = "tag" ]; then
@@ -35,6 +43,7 @@ while read -r lref lsha rref rsha; do
     esac
 
     if [ "$rsha" = "$z" ]; then range="$lsha"; else range="$rsha..$lsha"; fi
+
     bad=$(git log --format='%h %ae %ce' "$range" | grep -v -E "^[0-9a-f]+ ${ok_mail} ${ok_any}$")
     if [ -n "$bad" ]; then
         echo "pre-push: Commits ohne noreply-Adresse, Push abgebrochen:" >&2
@@ -42,15 +51,17 @@ while read -r lref lsha rref rsha; do
         fail=1
     fi
 
-    # Inhaltspruefung auf dem zu pushenden Stand. git grep -I ueberspringt
-    # Binaerdateien; Release-Zip und dieser Hook (der die Muster selbst nennt)
-    # werden zusaetzlich per Pfad ausgenommen.
-    hits=$(git grep -I -nE "$forbidden" "$lsha" -- . ':(exclude)releases/*.zip' ':(exclude)tools/hooks/*' 2>/dev/null)
-    if [ -n "$hits" ]; then
-        echo "pre-push: verbotenes Muster im zu pushenden Stand ($lref), Push abgebrochen:" >&2
-        printf '%s\n' "$hits" | head -n 20 >&2
-        fail=1
-    fi
+    # Inhalt JEDES Commits im Push-Bereich pruefen (N2b). git grep -I ueberspringt
+    # Binaeres; dieser Hook und ein etwaiges Release-Zip sind per Pfad ausgenommen.
+    for c in $(git rev-list "$range"); do
+        hits=$(git grep -I -nE "$forbidden" "$c" -- . ':(exclude)releases/*.zip' ':(exclude)tools/hooks/*' 2>/dev/null)
+        if [ -n "$hits" ]; then
+            echo "pre-push: verbotenes Muster in Commit $c, Push abgebrochen:" >&2
+            printf '%s\n' "$hits" | head -n 20 >&2
+            fail=1
+            break
+        fi
+    done
 done
 [ "$fail" -eq 0 ] || exit 1
 exit 0

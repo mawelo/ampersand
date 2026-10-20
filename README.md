@@ -45,7 +45,8 @@ plus Qt 6 Widgets. No hidapi is needed — the transport uses Linux `hidraw`
 directly.
 
 A portable AppImage that bundles all three programs and Qt can be built with
-`tools/build_appimage.py`; a pre-built archive is published under `releases/`.
+`tools/build_appimage.py`; a pre-built archive is published as a GitHub release
+asset (with its SHA-256), not committed to the repository.
 It runs on its own — no SSH, no network, nothing is installed on the unit.
 
 ## Device access (once)
@@ -130,8 +131,10 @@ udev/          hidraw access rule
 
 A versioned `pre-push` hook (`tools/hooks/pre-push`) guards the public repo: it
 rejects commits or tags that do not carry a GitHub noreply identity, and it
-scans the pushed tree for key material and private data. Activate it once per
-clone:
+scans every commit in the push for key material and private data. The hook
+carries only generic patterns; concrete per-environment values (serials, MAC
+prefixes, hostnames) go in the non-versioned `tools/hooks/denylist.local` (one
+regex per line). Activate the hook once per clone:
 
 ```bash
 git config core.hooksPath tools/hooks

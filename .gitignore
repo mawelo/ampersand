@@ -11,10 +11,14 @@ compile_commands.json
 __pycache__/
 *.user
 
-# AppImage build helpers fetched on demand, and the large AppImage itself
-# (the portable archive is published under releases/ instead)
+# AppImage build helpers fetched on demand, and the large portable build.
+# The release zip is a GitHub release asset, never committed.
 tools/appimage-tools/
 dist/*.AppImage
+releases/
+
+# Local, non-versioned pre-push denylist (concrete private patterns)
+tools/hooks/denylist.local
 
 # Local tool and session directories (any hidden directory) — never commit
 .*/
