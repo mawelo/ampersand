@@ -20,5 +20,7 @@ releases/
 # Local, non-versioned pre-push denylist (concrete private patterns)
 tools/hooks/denylist.local
 
-# Local tool and session directories (any hidden directory) — never commit
+# Local tool and session directories (any hidden directory) — never commit.
+# .github/ is the one exception: it holds repository metadata (FUNDING, etc.).
 .*/
+!.github/

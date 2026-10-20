@@ -149,6 +149,13 @@ and hardware read-backs are cited in `docs/protocol.md`:
 [pyquadcortex](https://github.com/stokes-audio/pyquadcortex) (MIT) and
 [CortexUSB](https://github.com/VanIseghemThomas/CortexUSB) (MIT).
 
+## Support
+
+Ampersand is a free, unofficial project built in spare time. If it is useful to
+you and you want to support the work, you can do so via PayPal:
+[paypal.me/mawelo](https://paypal.me/mawelo). Thank you — it is appreciated but
+never expected.
+
 ## License
 
 Apache License 2.0. See [`LICENSE`](LICENSE). The protobuf schemas under
