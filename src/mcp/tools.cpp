@@ -11,9 +11,13 @@
 #include "qc/version.hpp"
 
 #include <chrono>
+#include <cstdint>
+#include <format>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
+#include <string_view>
 #include <thread>
 #include <variant>
 
@@ -39,6 +43,47 @@ json str(const char* desc) { return {{"type", "string"}, {"description", desc}};
 json integer(const char* desc, int lo, int hi) { return {{"type", "integer"}, {"description", desc}, {"minimum", lo}, {"maximum", hi}}; }
 json number(const char* desc, double lo, double hi) { return {{"type", "number"}, {"description", desc}, {"minimum", lo}, {"maximum", hi}}; }
 json boolean(const char* desc) { return {{"type", "boolean"}, {"description", desc}}; }
+
+// Gepruefter Zugriff auf Tool-Argumente. operator[] auf einem const json ist
+// bei fehlendem Schluessel undefiniert (Review M3); diese Helfer melden einen
+// fehlenden Schluessel oder einen falschen JSON-Typ als klare Ausnahme, die der
+// Server (mcp_stdio_server.hpp) im try um den Handler als Tool-Fehler ausgibt.
+// Der Wertebereich bleibt bei den Fachfunktionen (qc::view::row_from_user u.a.).
+[[noreturn]] void arg_fail(std::string_view key, std::string_view want) {
+    throw std::invalid_argument(std::format("argument '{}' must be {}", key, want));
+}
+const json& arg(const json& args, std::string_view key) {
+    const auto it = args.find(key);
+    if (it == args.end()) throw std::invalid_argument(std::format("missing argument '{}'", key));
+    return *it;
+}
+int req_int(const json& a, std::string_view k) {
+    const auto& v = arg(a, k);
+    if (!v.is_number_integer()) arg_fail(k, "an integer");
+    return v.get<int>();
+}
+std::uint32_t req_u32(const json& a, std::string_view k) {
+    const auto& v = arg(a, k);
+    if (!v.is_number_integer()) arg_fail(k, "an integer");
+    const auto n = v.get<std::int64_t>();
+    if (n < 0 || n > 0xFFFF'FFFFLL) arg_fail(k, "a 0..4294967295 integer");
+    return static_cast<std::uint32_t>(n);
+}
+float req_float(const json& a, std::string_view k) {
+    const auto& v = arg(a, k);
+    if (!v.is_number()) arg_fail(k, "a number");
+    return v.get<float>();
+}
+bool req_bool(const json& a, std::string_view k) {
+    const auto& v = arg(a, k);
+    if (!v.is_boolean()) arg_fail(k, "true or false");
+    return v.get<bool>();
+}
+std::string req_str(const json& a, std::string_view k) {
+    const auto& v = arg(a, k);
+    if (!v.is_string()) arg_fail(k, "a string");
+    return v.get<std::string>();
+}
 
 std::optional<int> scene_arg(const json& args, const char* key) {
     if (!args.contains(key) || args[key].is_null()) return std::nullopt;
@@ -74,9 +119,9 @@ std::expected<int, std::string> position_arg(const json& args) {
 /// conversion to library indices lives in qc::view, so CLI, MCP and GUI cannot
 /// drift apart — mixing the two counts silently writes to the next cell.
 std::expected<std::pair<int, int>, std::string> cell_of(const json& args) {
-    auto row = qc::view::row_from_user(args["row"].get<int>());
+    auto row = qc::view::row_from_user(req_int(args, "row"));
     if (!row) return std::unexpected(row.error());
-    auto column = qc::view::column_from_user(args["column"].get<int>());
+    auto column = qc::view::column_from_user(req_int(args, "column"));
     if (!column) return std::unexpected(column.error());
     return std::pair{*row, *column};
 }
@@ -199,7 +244,7 @@ void Tools::register_all(mcp::Server& server) {
                          const auto folder = folder_arg(args);
                          int position = -1;
                          if (args.contains("name") && args["name"].is_string()) {
-                             auto f = d.find_preset(args["name"].get<std::string>(), folder);
+                             auto f = d.find_preset(req_str(args, "name"), folder);
                              if (!f) return ToolResult::error(f.error());
                              position = f->index;
                          } else {
@@ -282,7 +327,7 @@ void Tools::register_all(mcp::Server& server) {
                      with_device(writable([ok_or_err](qc::QuadCortex& d, const json& args) {
                          auto at = cell_of(args);
                          if (!at) return ToolResult::error(at.error());
-                         const int row = at->first, col = at->second, idx = args["param"].get<int>();
+                         const int row = at->first, col = at->second, idx = req_int(args, "param");
                          if (args.contains("text") && args["text"].is_string())
                              return ok_or_err(d.set_param_text(row, col, idx, args["text"].get<std::string>()));
                          float value = 0.0f;
@@ -313,7 +358,7 @@ void Tools::register_all(mcp::Server& server) {
                      with_device(writable([ok_or_err](qc::QuadCortex& d, const json& args) {
                          auto at = cell_of(args);
                          if (!at) return ToolResult::error(at.error());
-                         return ok_or_err(d.set_bypass(at->first, at->second, args["bypassed"].get<bool>(), scene_arg(args, "scene")));
+                         return ok_or_err(d.set_bypass(at->first, at->second, req_bool(args, "bypassed"), scene_arg(args, "scene")));
                      }))});
 
     server.add_tool({"qc_set_block", "Place a block (model id from qc_catalog_search) into a cell; replaces an existing one. Verified against the device's echo (a refusal means no DSP headroom).",
@@ -322,7 +367,7 @@ void Tools::register_all(mcp::Server& server) {
                      with_device(writable([ok_or_err](qc::QuadCortex& d, const json& args) {
                          auto at = cell_of(args);
                          if (!at) return ToolResult::error(at.error());
-                         return ok_or_err(d.set_block(at->first, at->second, args["model_id"].get<std::uint32_t>()));
+                         return ok_or_err(d.set_block(at->first, at->second, req_u32(args, "model_id")));
                      }))});
 
     server.add_tool({"qc_remove_block", "Remove the block at a cell.",
@@ -336,7 +381,7 @@ void Tools::register_all(mcp::Server& server) {
     server.add_tool({"qc_set_routing", "Set a row's input and/or output port (ids: see qc_ports).",
                      schema({{"row", integer("row 1-4, as labelled on the unit", 1, 4)}, {"in_port", integer("input port id", 0, 14)}, {"out_port", integer("output port id", 0, 22)}}, {"row"}),
                      with_device(writable([](qc::QuadCortex& d, const json& args) {
-                         auto row_index = qc::view::row_from_user(args["row"].get<int>());
+                         auto row_index = qc::view::row_from_user(req_int(args, "row"));
                          if (!row_index) return ToolResult::error(row_index.error());
                          const int row = *row_index;
                          if (args.contains("in_port")) { if (auto r = d.set_chain_input(row, args["in_port"].get<int>()); !r) return ToolResult::error(r.error()); }
@@ -358,7 +403,7 @@ void Tools::register_all(mcp::Server& server) {
                      with_device(writable([ok_or_err](qc::QuadCortex& d, const json& args) {
                          auto p = position_arg(args);
                          if (!p) return ToolResult::error(p.error());
-                         return ok_or_err(d.save_current_preset(folder_arg(args), *p, args["name"].get<std::string>(), args.value("instrument", 0)),
+                         return ok_or_err(d.save_current_preset(folder_arg(args), *p, req_str(args, "name"), args.value("instrument", 0)),
                                           std::format("saved to {} (re-list to see the final name)", qc::view::position_to_slot(*p)));
                      }))});
 
@@ -370,8 +415,7 @@ void Tools::register_all(mcp::Server& server) {
                      "(never overwrites). " + backup_where,
                      schema({{"name", str("plain file name, e.g. qc-2026-10-15.json")}}, {"name"}),
                      with_device(writable([this](qc::QuadCortex& d, const json& args) -> ToolResult {
-                         if (!args.contains("name") || !args["name"].is_string()) return ToolResult::error("`name` (string) is required");
-                         const auto name = args["name"].get<std::string>();
+                         const auto name = req_str(args, "name");
                          if (auto c = BackupStore::check_name(name); !c) return ToolResult::error(c.error());
                          auto b = d.read_backup();
                          if (!b) return ToolResult::error(b.error());
@@ -386,8 +430,7 @@ void Tools::register_all(mcp::Server& server) {
                      schema({{"name", str("plain file name of the backup")}, {"confirm", boolean("must be true")}}, {"name"}),
                      with_device(writable([this](qc::QuadCortex& d, const json& args) -> ToolResult {
                          if (!args.value("confirm", false)) return ToolResult::error("refusing: pass confirm=true (this overwrites device content)");
-                         if (!args.contains("name") || !args["name"].is_string()) return ToolResult::error("`name` (string) is required");
-                         auto data = backups_.load(args["name"].get<std::string>());
+                         auto data = backups_.load(req_str(args, "name"));
                          if (!data) return ToolResult::error(data.error());
                          if (!json::accept(*data)) return ToolResult::error("not a valid backup: the file is not JSON");
                          auto r = d.restore_backup(*data);
@@ -397,7 +440,7 @@ void Tools::register_all(mcp::Server& server) {
     server.add_tool({"qc_set_master_volume", "Set the master volume (0..1; the unit shows round(v*100)).",
                      schema({{"volume", number("0..1", 0.0, 1.0)}}, {"volume"}),
                      with_device(writable([ok_or_err](qc::QuadCortex& d, const json& args) {
-                         return ok_or_err(d.set_master_volume(args["volume"].get<float>()));
+                         return ok_or_err(d.set_master_volume(req_float(args, "volume")));
                      }))});
 
     server.add_tool({"qc_tuner",
@@ -406,7 +449,7 @@ void Tools::register_all(mcp::Server& server) {
                      "report its tuner state back, so this sets it rather than toggling it.",
                      schema({{"show", boolean("true = show the tuner")}}, {"show"}),
                      with_device(writable([ok_or_err](qc::QuadCortex& d, const json& args) {
-                         const bool show = args["show"].get<bool>();
+                         const bool show = req_bool(args, "show");
                          return ok_or_err(d.set_tuner(show), show ? "tuner shown (MIDI CC#45)" : "tuner hidden (MIDI CC#45)");
                      }))});
 
@@ -490,7 +533,7 @@ void Tools::register_all(mcp::Server& server) {
     server.add_tool({"qc_set_tempo", "Set the current preset's tempo (40..240 bpm).",
                      schema({{"bpm", number("40..240", 40.0, 240.0)}}, {"bpm"}),
                      with_device(writable([ok_or_err](qc::QuadCortex& d, const json& args) {
-                         return ok_or_err(d.set_tempo_bpm(args["bpm"].get<float>()));
+                         return ok_or_err(d.set_tempo_bpm(req_float(args, "bpm")));
                      }))});
 }
 

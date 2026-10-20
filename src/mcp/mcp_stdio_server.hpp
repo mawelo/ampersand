@@ -85,10 +85,23 @@ public:
 
     /// Handle one request object; notifications produce no output.
     void handle(const json& req, std::ostream& out) {
+        // A request that is not a JSON object (e.g. a bare number) would make
+        // value()/operator[] below throw; JSON-RPC calls that an invalid
+        // request. Guard it, and require a string "method" (both reproduced a
+        // type_error that terminated the server, Review L3).
+        if (!req.is_object()) {
+            emit(out, make_error(nullptr, -32600, "invalid request: expected a JSON object"));
+            return;
+        }
         const json id = req.contains("id") ? req["id"] : json(nullptr);
-        const std::string method = req.value("method", "");
-        const json params = req.contains("params") ? req["params"] : json::object();
         const bool is_notification = !req.contains("id");
+        const auto method_it = req.find("method");
+        if (method_it == req.end() || !method_it->is_string()) {
+            if (!is_notification) emit(out, make_error(id, -32600, R"(invalid request: "method" must be a string)"));
+            return;
+        }
+        const std::string method = method_it->get<std::string>();
+        const json params = (req.contains("params") && req["params"].is_object()) ? req["params"] : json::object();
 
         if (method == "initialize") {
             json result{{"protocolVersion", negotiate(params.value("protocolVersion", std::string(kProtocolVersion)))},

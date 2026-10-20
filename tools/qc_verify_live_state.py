@@ -74,9 +74,22 @@ def zaehle_rx(log: str) -> dict[str, int]:
 
 
 def kamera(ziel: Path) -> bool:
-    rc, _ = lauf(["bash", "-c", f'cd "{ziel.parent}" && ~/bin/webcam_shot.sh 0 >/dev/null 2>&1 '
-                                f'&& mv web-cam-shot.jpg "{ziel.name}"'], timeout=60)
-    return rc == 0 and ziel.exists()
+    # Keine Shell (Review L5): der Zielpfad aus --into darf nicht in eine
+    # bash -c-Zeile geraten (Injection). webcam_shot.sh schreibt web-cam-shot.jpg
+    # ins Arbeitsverzeichnis; danach wird die Datei per Python umbenannt.
+    shot = Path.home() / "bin/webcam_shot.sh"
+    try:
+        r = subprocess.run([str(shot), "0"], cwd=ziel.parent,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if r.returncode != 0:
+        return False
+    try:
+        (ziel.parent / "web-cam-shot.jpg").replace(ziel)
+    except OSError:
+        return False
+    return ziel.exists()
 
 
 def pegel_je_kanal(wav: Path) -> list[tuple[float, float]]:

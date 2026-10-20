@@ -913,7 +913,9 @@ int run(const Args& a) {
                 const int art = static_cast<int>(kopf & 7);
                 if (art == 2) {
                     const std::uint64_t len = varint(b, i);
-                    if (i + len > b.size()) break;
+                    // i <= b.size() nach varint; so kann i + len (Geraete-len)
+                    // nicht ueberlaufen (Review M5).
+                    if (len > b.size() - i) break;
                     if (nr == gesucht) return b.subspan(i, len);
                     i += len;
                 } else if (art == 0) {

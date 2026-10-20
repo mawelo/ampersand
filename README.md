@@ -126,6 +126,19 @@ tools/         helper scripts (build, measurement, diagnostics)
 udev/          hidraw access rule
 ```
 
+## Maintainers: before pushing
+
+A versioned `pre-push` hook (`tools/hooks/pre-push`) guards the public repo: it
+rejects commits or tags that do not carry a GitHub noreply identity, and it
+scans the pushed tree for key material and private data. Activate it once per
+clone:
+
+```bash
+git config core.hooksPath tools/hooks
+```
+
+Do not push with `--no-verify`; that bypasses the hook.
+
 ## Provenance
 
 The protocol knowledge builds on two open-source projects whose wire captures

@@ -31,10 +31,12 @@ Historie: git log
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -52,17 +54,57 @@ TOOL_URLS = {
     "linuxdeploy-plugin-qt": "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage",
     "appimagetool": "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage",
 }
+# Die continuous-URLs sind an eine feste SHA-256 gebunden (Review M7): ein
+# abweichender Upstream-Build schlaegt fehl, statt ungeprueft zu laufen. Beim
+# bewussten Anheben einer Version wird die Pruefsumme hier mit aktualisiert
+# (sha256sum tools/appimage-tools/<name>).
+TOOL_SHA256 = {
+    "linuxdeploy": "8aea8da0f7f7039d2a2cecb14657d752a222a5e1d3825caeef186c82f751cdd1",
+    "linuxdeploy-plugin-qt": "cfc1055b2b9dbc08412b579f20990b7b41a17b61beaa5847dc9477c96c9e9617",
+    "appimagetool": "95cbe7cce9717fce90c484e34052ee7c7f1d7635b33c12525b4776826a7d29b6",
+}
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def fetch_tools() -> None:
     TOOLS.mkdir(parents=True, exist_ok=True)
     for name, url in TOOL_URLS.items():
         dst = TOOLS / name
+        want = TOOL_SHA256[name]
         if dst.exists():
-            continue
+            got = _sha256(dst)
+            if got == want:
+                continue
+            raise SystemExit(
+                f"{dst} does not match the pinned SHA-256.\n"
+                f"  expected {want}\n  got      {got}\n"
+                "Remove the file to re-fetch, or update TOOL_SHA256 on a deliberate bump.")
         print(f"downloading {name} ...")
-        urllib.request.urlretrieve(url, dst)  # noqa: S310 (trusted GitHub release)
-        dst.chmod(0o755)
+        # Erst in eine Temporaerdatei neben dem Ziel, pruefen, dann atomar
+        # umbenennen: ein abgebrochener Download bleibt nicht als 'fertiges'
+        # Werkzeug liegen.
+        fd, tmp_name = tempfile.mkstemp(dir=TOOLS, prefix=f".{name}.", suffix=".part")
+        os.close(fd)
+        tmp = Path(tmp_name)
+        try:
+            urllib.request.urlretrieve(url, tmp)  # noqa: S310 (GitHub release, SHA-256-checked next)
+            got = _sha256(tmp)
+            if got != want:
+                raise SystemExit(
+                    f"downloaded {name} does not match the pinned SHA-256.\n"
+                    f"  expected {want}\n  got      {got}\n  url      {url}")
+            tmp.chmod(0o755)
+            os.replace(tmp, dst)
+        finally:
+            if tmp.exists():
+                tmp.unlink()
 
 
 def make_icon(path: Path) -> None:
