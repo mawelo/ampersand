@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/ampersand-logo.png" alt="Ampersand" width="420">
+</p>
+
 # Ampersand
 
 Ampersand is an independent Linux control application for the **Neural DSP Quad
